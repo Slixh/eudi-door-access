@@ -1,0 +1,28 @@
+[package]
+name = "eudi-access"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+isomdl = "0.2"
+anyhow = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+async-trait = "0.1"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+uuid = { version = "1", features = ["v4"] }
+bluer = "0.17.4"
+pcsc = "2.9.0"
+rppal = "0.22.1"
+
+# Linux-only hardware crates. They won't build on Windows.
+[target.'cfg(target_os = "linux")'.dependencies]
+bluer = { version = "0.17", features = ["bluetoothd", "l2cap"] }
+pcsc = "2"
+rppal = "0.22"
