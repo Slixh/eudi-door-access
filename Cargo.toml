@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-isomdl = "0.2"
+isomdl = { git = "https://github.com/Slixh/isomdl", branch = "main" }
 anyhow = "1"
 thiserror = "1"
 tracing = "0.1"
@@ -20,6 +20,7 @@ uuid = { version = "1", features = ["v4"] }
 bluer = "0.17.4"
 pcsc = "2.9.0"
 rppal = "0.22.1"
+futures = "0.3.32"
 
 # Linux-only hardware crates. They won't build on Windows.
 [target.'cfg(target_os = "linux")'.dependencies]

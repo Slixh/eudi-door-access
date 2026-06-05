@@ -13,6 +13,7 @@ pub struct Engagement {
     /// BLE service UUID announced inside the engagement; we use it to find
     /// the phone over GATT.
     pub ble_service_uuid: Uuid,
+    pub ndef_bytes: Vec<u8>,     // NEW: The complete raw bytes of the NDEF file
 }
 
 #[async_trait]
