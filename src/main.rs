@@ -81,6 +81,7 @@ fn main() -> Result<()> {
 
     let mut current_state = ("standby".to_string(), None::<String>);
     let mut current_qr = (initial_qr_uri, initial_qr_svg);
+    let mut current_size = tao::dpi::PhysicalSize::new(0, 0);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -138,10 +139,14 @@ fn main() -> Result<()> {
                 event: WindowEvent::Resized(size),
                 ..
             } => {
-                let _ = webview.set_bounds(wry::Rect {
-                    position: wry::dpi::Position::Logical(wry::dpi::LogicalPosition::new(0.0, 0.0)),
-                    size: wry::dpi::Size::Physical(size),
-                });
+                // To avoid infinite resize loops on Linux/GTK, we check if the size actually changed
+                if current_size != size {
+                    current_size = size;
+                    let _ = webview.set_bounds(wry::Rect {
+                        position: wry::dpi::Position::Logical(wry::dpi::LogicalPosition::new(0.0, 0.0)),
+                        size: wry::dpi::Size::Physical(size),
+                    });
+                }
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
