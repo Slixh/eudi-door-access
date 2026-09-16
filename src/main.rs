@@ -81,7 +81,11 @@ fn main() -> Result<()> {
 
     let mut current_state = ("standby".to_string(), None::<String>);
     let mut current_qr = (initial_qr_uri, initial_qr_svg);
-    let mut current_size = tao::dpi::PhysicalSize::new(0, 0);
+    let mut current_size = window.inner_size();
+    let _ = webview.set_bounds(wry::Rect {
+        position: wry::dpi::Position::Logical(wry::dpi::LogicalPosition::new(0.0, 0.0)),
+        size: wry::dpi::Size::Physical(current_size),
+    });
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
