@@ -135,6 +135,15 @@ fn main() -> Result<()> {
                 UiCommand::Close => *control_flow = ControlFlow::Exit,
             },
             Event::WindowEvent {
+                event: WindowEvent::Resized(size),
+                ..
+            } => {
+                let _ = webview.set_bounds(wry::Rect {
+                    position: wry::dpi::Position::Logical(wry::dpi::LogicalPosition::new(0.0, 0.0)),
+                    size: wry::dpi::Size::Physical(size),
+                });
+            }
+            Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
