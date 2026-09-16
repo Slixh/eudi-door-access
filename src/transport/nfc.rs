@@ -3,12 +3,10 @@ use anyhow::{anyhow, Context, Result};
 use pcsc::*;
 use uuid::Uuid;
 
-/// AID for ISO 18013-5 mdoc reader: A0 00 00 02 48 04 00
-//const MDOC_AID: [u8; 7] = [0xA0, 0x00, 0x00, 0x02, 0x48, 0x04, 0x00];
-
+/// Standard NFC Forum NDEF Application AID
 const NDEF_AID: [u8; 7] = [0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01];
 
-/// Poll a PC/SC NFC reader (e.g. ACR122U), SELECT the mdoc applet, then read
+/// Poll a PC/SC NFC reader (e.g. ACR122U), SELECT the NDEF applet, then read
 /// the NDEF handover that carries the `DeviceEngagement` and the BLE UUID.
 pub async fn poll_for_engagement() -> Result<Engagement> {
     // The pcsc crate is sync; do the blocking work on a worker thread so we
@@ -23,6 +21,7 @@ fn poll_blocking() -> Result<Engagement> {
     let reader = readers
         .next()
         .ok_or_else(|| anyhow!("no PC/SC NFC reader connected"))?;
+
     tracing::info!("Using NFC reader: {:?}", reader);
 
     // Block until a card/phone is present.
@@ -34,20 +33,7 @@ fn poll_blocking() -> Result<Engagement> {
         }
     };
 
-    // 1. SELECT mdoc AID.
-    //let mut select = vec![0x00, 0xA4, 0x04, 0x00, MDOC_AID.len() as u8];
-    //select.extend_from_slice(&MDOC_AID);
-    //select.push(0x00);
-    //let mut resp = [0u8; 4096];
-    //let resp = card.transmit(&select, &mut resp)?;
-    //ensure_sw_ok(resp)?;
-//
-    //// 2. The mdoc applet exposes the engagement either through an NDEF file
-    ////    (static handover) or via a few APDU exchanges (negotiated handover).
-    ////    For brevity we only implement the simpler static handover path here:
-    ////    SELECT NDEF EF (0xE104), READ BINARY until done.
-    //let ndef = read_ndef_file(&card)?;
-
+    // 1. SELECT standard NDEF Application AID
     let mut select = vec![0x00, 0xA4, 0x04, 0x00, NDEF_AID.len() as u8];
     select.extend_from_slice(&NDEF_AID);
     select.push(0x00);
@@ -56,18 +42,16 @@ fn poll_blocking() -> Result<Engagement> {
     let resp = card.transmit(&select, &mut resp)?;
     ensure_sw_ok(resp)?;
 
-    // 2. The Android EUDI wallet is now ready for you to read the NDEF file.
-    // (Your existing read_ndef_file function will work perfectly here)
+    // 2. The Android EUDI wallet is now ready for us to read the NDEF file.
     let ndef = read_ndef_file(&card)?;
 
-    // 3. Parse NDEF, find the Handover Select / mdoc record, and extract
-    //    `DeviceEngagement` plus the BLE service UUID.
+    // 3. Parse NDEF, extract the DeviceEngagement bytes and the BLE service UUID.
     let (engagement_bytes, ble_uuid) = parse_handover_ndef(&ndef)?;
 
     Ok(Engagement {
         bytes: engagement_bytes,
         ble_service_uuid: ble_uuid,
-        ndef_bytes: ndef,
+        ndef_bytes: ndef, // Keep the raw bytes for the isomdl SessionTranscript hash
     })
 }
 
@@ -83,14 +67,13 @@ fn ensure_sw_ok(resp: &[u8]) -> Result<()> {
 }
 
 fn read_ndef_file(card: &Card) -> Result<Vec<u8>> {
-    // 1. (NEW) Select Capability Container (CC) file first (0xE103)
-    // Many Android HCE implementations require this before E104.
+    // 1. Select Capability Container (CC) file first (0xE103)
+    // Many Android HCE implementations strictly require this before E104.
     tracing::info!("TX: SELECT CC (E103)");
     let select_cc = [0x00, 0xA4, 0x00, 0x0C, 0x02, 0xE1, 0x03];
     let mut buf = [0u8; 256];
     let resp = card.transmit(&select_cc, &mut buf)?;
     tracing::info!("RX: {:02X?}", resp);
-    // We don't strictly ensure_sw_ok here, just in case the wallet doesn't care about CC.
 
     // 2. SELECT EF NDEF (file id 0xE104)
     tracing::info!("TX: SELECT NDEF (E104)");
@@ -100,7 +83,7 @@ fn read_ndef_file(card: &Card) -> Result<Vec<u8>> {
     tracing::info!("RX: {:02X?}", resp);
     ensure_sw_ok(resp)?;
 
-    // 3. Read NDEF length (First 2 bytes)
+    // 3. Read NDEF length (First 2 bytes of the file)
     tracing::info!("TX: READ BINARY (Length)");
     let read_len = [0x00, 0xB0, 0x00, 0x00, 0x02];
     let mut buf = [0u8; 16];
@@ -130,6 +113,7 @@ fn read_ndef_file(card: &Card) -> Result<Vec<u8>> {
     tracing::info!("Successfully read {} NDEF bytes", data.len());
     Ok(data)
 }
+
 /// Pull the mdoc `DeviceEngagement` bytes and BLE service UUID out of the
 /// NDEF Handover Select message.
 fn parse_handover_ndef(ndef: &[u8]) -> Result<(Vec<u8>, Uuid)> {

@@ -1,22 +1,9 @@
-#[cfg(target_os = "linux")]
 use super::{Channel, Engagement};
-#[cfg(target_os = "linux")]
 use anyhow::{anyhow, Result};
-#[cfg(target_os = "linux")]
-use bluer::{gatt::remote::Characteristic, Session, AdapterEvent};
-#[cfg(target_os = "linux")]
-use futures::StreamExt;
-#[cfg(target_os = "linux")]
-use std::time::Duration;
-#[cfg(target_os = "linux")]
-use tokio::sync::mpsc;
-#[cfg(target_os = "linux")]
-use tokio::time::timeout;
 
-#[cfg(not(target_os = "linux"))]
-use super::{Channel, Engagement};
-#[cfg(not(target_os = "linux"))]
-use anyhow::{anyhow, Result};
+// ============================================================================
+// NON-LINUX STUB IMPLEMENTATION
+// ============================================================================
 
 #[cfg(not(target_os = "linux"))]
 pub struct BleChannel;
@@ -37,13 +24,65 @@ pub async fn connect(_eng: &Engagement) -> Result<BleChannel> {
     Err(anyhow!("BLE is only supported on Linux"))
 }
 
+// ============================================================================
+// LINUX BLUETOOTH IMPLEMENTATION (BlueZ)
+// ============================================================================
+
+#[cfg(target_os = "linux")]
+use {
+    bluer::{gatt::remote::Characteristic, Session},
+    futures::StreamExt,
+    std::time::Duration,
+    tokio::sync::mpsc,
+    tokio::time::timeout,
+};
+
 #[cfg(target_os = "linux")]
 // ISO 18013-5 standardized Characteristic UUIDs for mdoc BLE transfer
 const MDOC_STATE_UUID: &str = "00000001-a123-48ce-896b-4c76973373e6";
 #[cfg(target_os = "linux")]
-const MDOC_C2S_UUID: &str   = "00000002-a123-48ce-896b-4c76973373e6";
+const MDOC_C2S_UUID: &str = "00000002-a123-48ce-896b-4c76973373e6";
 #[cfg(target_os = "linux")]
-const MDOC_S2C_UUID: &str   = "00000003-a123-48ce-896b-4c76973373e6";
+const MDOC_S2C_UUID: &str = "00000003-a123-48ce-896b-4c76973373e6";
+
+#[cfg(target_os = "linux")]
+pub struct BleChannel {
+    pub client2server: Characteristic,
+    pub server2client: Characteristic,
+    pub notif_rx: mpsc::Receiver<Vec<u8>>,
+}
+
+#[cfg(target_os = "linux")]
+#[async_trait::async_trait]
+impl Channel for BleChannel {
+    async fn send(&mut self, frame: &[u8]) -> Result<()> {
+        // 18013-5 §8.3.3.1.1.4 fragmentation: first byte 0x00 = last chunk,
+        // 0x01 = more follow. Use MTU-1 as chunk size.
+        let chunk_size = 20;
+        for (i, ch) in frame.chunks(chunk_size).enumerate() {
+            let last = (i + 1) * chunk_size >= frame.len();
+            let mut buf = Vec::with_capacity(ch.len() + 1);
+            buf.push(if last { 0x00 } else { 0x01 });
+            buf.extend_from_slice(ch);
+            self.client2server.write(&buf).await?;
+        }
+        Ok(())
+    }
+
+    async fn recv(&mut self) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        while let Some(chunk) = self.notif_rx.recv().await {
+            if chunk.is_empty() {
+                return Err(anyhow!("empty BLE frame"));
+            }
+            out.extend_from_slice(&chunk[1..]);
+            if chunk[0] == 0x00 {
+                return Ok(out);
+            }
+        }
+        Err(anyhow!("BLE channel closed"))
+    }
+}
 
 #[cfg(target_os = "linux")]
 pub async fn connect(eng: &Engagement) -> Result<BleChannel> {
@@ -98,8 +137,8 @@ pub async fn connect(eng: &Engagement) -> Result<BleChannel> {
                 let char_uuid = charac.uuid().await?.to_string();
                 match char_uuid.as_str() {
                     MDOC_STATE_UUID => state_char = Some(charac),
-                    MDOC_C2S_UUID   => c2s_char = Some(charac),
-                    MDOC_S2C_UUID   => s2c_char = Some(charac),
+                    MDOC_C2S_UUID => c2s_char = Some(charac),
+                    MDOC_S2C_UUID => s2c_char = Some(charac),
                     _ => {}
                 }
             }
@@ -114,7 +153,6 @@ pub async fn connect(eng: &Engagement) -> Result<BleChannel> {
     // 4. Subscribe to Server2Client notifications and pipe them into mpsc
     tracing::info!("Subscribing to Server2Client notifications...");
 
-    // Notice we removed `mut` here, because `pin!` will handle mutability
     let notif_stream = server2client.notify().await?;
     let (tx, rx) = mpsc::channel(100);
 
@@ -140,43 +178,4 @@ pub async fn connect(eng: &Engagement) -> Result<BleChannel> {
         server2client,
         notif_rx: rx,
     })
-}
-
-#[cfg(target_os = "linux")]
-pub struct BleChannel {
-    pub client2server: Characteristic,
-    pub server2client: Characteristic,
-    pub notif_rx: mpsc::Receiver<Vec<u8>>,
-}
-
-#[cfg(target_os = "linux")]
-#[async_trait::async_trait]
-impl Channel for BleChannel {
-    async fn send(&mut self, frame: &[u8]) -> Result<()> {
-        // 18013-5 §8.3.3.1.1.4 fragmentation: first byte 0x00 = last chunk,
-        // 0x01 = more follow. Use MTU-1 as chunk size.
-        let chunk_size = 20;
-        for (i, ch) in frame.chunks(chunk_size).enumerate() {
-            let last = (i + 1) * chunk_size >= frame.len();
-            let mut buf = Vec::with_capacity(ch.len() + 1);
-            buf.push(if last { 0x00 } else { 0x01 });
-            buf.extend_from_slice(ch);
-            self.client2server.write(&buf).await?;
-        }
-        Ok(())
-    }
-
-    async fn recv(&mut self) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        while let Some(chunk) = self.notif_rx.recv().await {
-            if chunk.is_empty() {
-                return Err(anyhow!("empty BLE frame"));
-            }
-            out.extend_from_slice(&chunk[1..]);
-            if chunk[0] == 0x00 {
-                return Ok(out);
-            }
-        }
-        Err(anyhow!("BLE channel closed"))
-    }
 }
