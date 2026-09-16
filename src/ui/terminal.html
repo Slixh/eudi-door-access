@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html class="dark" lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <title>EUDI Türterminal · Smart Access</title>
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24..48,100..700,0..1,-50..200" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface": "#0a0e17",
+            "surface-low": "#101522",
+            "surface-card": "#151b2b",
+            "surface-bright": "#1f273d",
+            "primary": "#a3c9ff",
+            "primary-container": "#1493ff",
+            "secondary": "#70ffba",
+            "secondary-fixed": "#4dffb2",
+            "secondary-dark": "#003822",
+            "error": "#ffb4ab",
+            "error-container": "#93000a",
+            "on-surface": "#f1f4fd",
+            "on-surface-variant": "#9aa4b8",
+            "outline": "#404756"
+          },
+          fontFamily: {
+            sans: ["Inter", "sans-serif"],
+            display: ["Space Grotesk", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    @keyframes pulseSlow {
+      0%, 100% { transform: scale(1); opacity: 0.35; }
+      50% { transform: scale(1.08); opacity: 0.75; }
+    }
+    @keyframes ringSpread {
+      0% { transform: scale(0.85); opacity: 0.85; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+    .pulse-ring-1 {
+      animation: ringSpread 3s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    .pulse-ring-2 {
+      animation: ringSpread 3s cubic-bezier(0.215, 0.61, 0.355, 1) infinite 1s;
+    }
+    .pulse-ring-3 {
+      animation: ringSpread 3s cubic-bezier(0.215, 0.61, 0.355, 1) infinite 2s;
+    }
+    .soft-glow-primary {
+      box-shadow: 0 0 70px -10px rgba(20, 147, 255, 0.35);
+    }
+    .soft-glow-success {
+      box-shadow: 0 0 90px -5px rgba(112, 255, 186, 0.45);
+    }
+    .soft-glow-error {
+      box-shadow: 0 0 90px -5px rgba(255, 100, 100, 0.4);
+    }
+    #qrTarget svg {
+      width: 100%;
+      height: 100%;
+      max-width: 220px;
+      max-height: 220px;
+      display: block;
+      margin: 0 auto;
+    }
+    /* Fallback Material Symbols SVG icons if webfont not yet loaded */
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48;
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-sans antialiased select-none min-h-screen flex flex-col justify-between overflow-hidden">
+
+  <!-- TOP APP BAR: Minimal, Crisp Facility Context -->
+  <header class="w-full px-8 lg:px-14 py-6 flex items-center justify-between border-b border-white/[0.06] bg-surface-low/80 backdrop-blur-xl z-20">
+    <!-- Left: Door & Facility Title -->
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 rounded-2xl bg-surface-bright/70 border border-white/10 flex items-center justify-center text-primary shadow-inner">
+        <span class="material-symbols-outlined text-2xl">sensor_door</span>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-mono font-semibold tracking-wider text-on-surface-variant uppercase">AUGSBURG DATA CENTER · RECHENZENTRUM 01</span>
+        </div>
+        <div class="text-xl font-display font-bold text-on-surface tracking-tight flex items-center gap-2">
+          <span id="facilityTitle">Tür IAA-GATE-04</span>
+          <span class="text-xs font-sans font-medium px-2 py-0.5 rounded-md bg-white/[0.08] text-on-surface-variant" id="roomBadge">Serverraum EG</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Operational Status & Live Clock -->
+    <div class="flex items-center gap-6">
+      <div class="flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-surface-card border border-white/[0.08] shadow-sm">
+        <span class="relative flex h-2.5 w-2.5">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary-fixed opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-secondary"></span>
+        </span>
+        <span class="text-xs font-medium tracking-wide text-secondary-fixed uppercase">System Bereit</span>
+      </div>
+      <div class="h-6 w-px bg-white/10 hidden sm:block"></div>
+      <div class="text-right font-display text-2xl font-semibold tracking-tight text-on-surface tabular-nums" id="liveClock">--:--</div>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT: Centered Touch Canvas -->
+  <main class="flex-1 flex items-center justify-center px-6 py-8 relative">
+    <!-- Ambient Background Lighting Orbs -->
+    <div class="absolute w-[680px] h-[680px] rounded-full bg-primary-container/10 blur-[130px] pointer-events-none transition-all duration-700" id="ambientGlow"></div>
+
+    <!-- STATE 1: BEREIT / DISCOVERY (Default Standby) -->
+    <section class="kiosk-state w-full max-w-2xl flex flex-col items-center text-center transition-all duration-500" id="stateStandby">
+      <!-- Interactive Hero Contactless Tap Zone -->
+      <div class="relative w-80 h-80 sm:w-96 sm:h-96 flex items-center justify-center">
+        <!-- Radar Pulse Echoes -->
+        <div class="pulse-ring-1 absolute inset-0 m-auto w-full h-full rounded-full border border-primary/20 pointer-events-none"></div>
+        <div class="pulse-ring-2 absolute inset-0 m-auto w-[85%] h-[85%] rounded-full border border-primary/25 pointer-events-none"></div>
+        <div class="pulse-ring-3 absolute inset-0 m-auto w-[70%] h-[70%] rounded-full border border-primary/30 pointer-events-none"></div>
+
+        <!-- Central High-Tech Sensor Target Disc -->
+        <div class="relative w-52 h-52 sm:w-60 sm:h-60 rounded-full bg-gradient-to-b from-surface-bright to-surface-card border border-white/15 p-2 flex flex-col items-center justify-center soft-glow-primary transition-all duration-300">
+          <div class="w-full h-full rounded-full border border-dashed border-primary/40 flex flex-col items-center justify-center bg-surface-low/60">
+            <span class="material-symbols-outlined text-[68px] sm:text-[76px] text-primary">contactless</span>
+            <span class="mt-2 text-[11px] font-mono tracking-widest text-primary/80 uppercase font-semibold">Sensorbereich</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Prompt Texts -->
+      <div class="mt-8 space-y-3">
+        <h1 class="text-3xl sm:text-4xl font-display font-bold text-on-surface tracking-tight">
+          Smartphone oder Ausweis vorhalten
+        </h1>
+        <p class="text-base sm:text-lg text-on-surface-variant max-w-lg mx-auto font-normal">
+          Öffnen mit EU Digital Identity Wallet (EUDI) oder digitalem Führerschein (ISO 18013-5 mDL).
+        </p>
+      </div>
+
+      <!-- Fallback / QR Trigger -->
+      <div class="mt-8 flex items-center gap-3">
+        <button class="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-surface-card hover:bg-surface-bright border border-white/10 text-on-surface text-sm font-medium transition-all shadow-sm active:scale-95 cursor-pointer" onclick="toggleQRModal(true)">
+          <span class="material-symbols-outlined text-primary text-[20px]">qr_code_scanner</span>
+          <span>Kein NFC? QR-Code scannen</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- STATE 2: VERBINDUNG WIRD AUFGEBAUT (Connecting / BLE) -->
+    <section class="kiosk-state hidden w-full max-w-2xl flex flex-col items-center text-center transition-all duration-500" id="stateConnecting">
+      <div class="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center my-6">
+        <!-- SVG Spinning Modern Loader -->
+        <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
+          <circle class="text-white/10" cx="50" cy="50" fill="none" r="42" stroke="currentColor" stroke-width="4"></circle>
+          <circle class="text-primary stroke-current animate-[spin_1.5s_linear_infinite]" cx="50" cy="50" fill="none" r="42" stroke="currentColor" stroke-dasharray="264" stroke-dashoffset="120" stroke-linecap="round" stroke-width="5"></circle>
+        </svg>
+        <div class="absolute flex flex-col items-center justify-center">
+          <span class="material-symbols-outlined text-5xl sm:text-6xl text-primary animate-pulse">lock_person</span>
+          <span class="text-xs font-mono text-primary mt-2 font-medium tracking-wider">EUDI WALLET</span>
+        </div>
+      </div>
+
+      <div class="space-y-2 mt-4">
+        <h2 class="text-3xl sm:text-4xl font-display font-bold text-on-surface tracking-tight">
+          Authentifizierung läuft...
+        </h2>
+        <p class="text-base sm:text-lg text-on-surface-variant max-w-md mx-auto">
+          Berechtigung für Tür IAA-GATE-04 wird verschlüsselt verifiziert. Bitte Gerät ruhig halten.
+        </p>
+      </div>
+
+      <div class="mt-8 flex items-center gap-2 px-4 py-2 rounded-full bg-surface-card border border-white/10 text-xs font-mono text-on-surface-variant">
+        <span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+        <span>Sicherer BLE-Kanal verbunden</span>
+      </div>
+    </section>
+
+    <!-- STATE 3: ZUTRITT GEWÄHRT (Access Granted) -->
+    <section class="kiosk-state hidden w-full max-w-2xl flex flex-col items-center text-center transition-all duration-500" id="stateGranted">
+      <!-- Emerald Open Disc -->
+      <div class="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center my-4">
+        <div class="absolute inset-4 rounded-full bg-secondary/15 animate-ping opacity-50"></div>
+        <div class="w-48 h-48 sm:w-56 sm:h-56 rounded-full bg-secondary flex items-center justify-center text-secondary-dark soft-glow-success">
+          <span class="material-symbols-outlined text-[88px] sm:text-[96px] font-light">lock_open_right</span>
+        </div>
+      </div>
+
+      <div class="space-y-2 mt-2">
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-secondary/20 text-secondary-fixed text-sm font-semibold tracking-wider uppercase mb-1">
+          <span class="material-symbols-outlined text-base">check_circle</span>
+          <span>Tür entriegelt</span>
+        </div>
+        <h2 class="text-3xl sm:text-4xl font-display font-bold text-on-surface tracking-tight">
+          Zutritt Gewährt · Bitte eintreten
+        </h2>
+        <p class="text-base sm:text-lg text-on-surface-variant max-w-md mx-auto" id="grantedSubtitle">
+          Willkommen. Tür schließt automatisch.
+        </p>
+      </div>
+
+      <!-- Auto-Close Countdown Progress -->
+      <div class="w-full max-w-md mt-8 p-4 rounded-2xl bg-surface-card border border-white/10 text-left">
+        <div class="flex items-center justify-between text-xs font-mono mb-2">
+          <span class="text-on-surface-variant uppercase tracking-wider">Türschließer Timer</span>
+          <span class="text-secondary font-bold" id="countdownLabel">5s verbleibend</span>
+        </div>
+        <div class="w-full bg-surface-bright h-2 rounded-full overflow-hidden">
+          <div class="bg-secondary h-full rounded-full w-full transition-all duration-1000 ease-linear" id="countdownProgressBar"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATE 4: ZUTRITT VERWEIGERT (Access Denied) -->
+    <section class="kiosk-state hidden w-full max-w-2xl flex flex-col items-center text-center transition-all duration-500" id="stateDenied">
+      <div class="relative w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center my-4">
+        <div class="w-48 h-48 sm:w-56 sm:h-56 rounded-full bg-error-container border-2 border-error/40 flex items-center justify-center text-error soft-glow-error">
+          <span class="material-symbols-outlined text-[88px] sm:text-[96px]">block</span>
+        </div>
+      </div>
+
+      <div class="space-y-2 mt-2">
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-error/20 text-error text-sm font-semibold tracking-wider uppercase mb-1">
+          <span class="material-symbols-outlined text-base">error</span>
+          <span>Zugriff nicht autorisiert</span>
+        </div>
+        <h2 class="text-3xl sm:text-4xl font-display font-bold text-on-surface tracking-tight">
+          Keine Zutrittsberechtigung
+        </h2>
+        <p class="text-base sm:text-lg text-on-surface-variant max-w-md mx-auto" id="deniedSubtitle">
+          Dieses Wallet besitzt keine Freigabe für Tür IAA-GATE-04.
+        </p>
+      </div>
+
+      <div class="mt-8 flex items-center gap-4">
+        <button class="h-12 px-6 rounded-xl bg-surface-card hover:bg-surface-bright border border-white/10 text-on-surface font-medium text-sm flex items-center gap-2 transition-all cursor-pointer" onclick="switchState('standby')">
+          <span class="material-symbols-outlined text-primary text-[20px]">refresh</span>
+          <span>Erneut versuchen</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- QR-CODE FALLBACK MODAL (ISO 18013-5 Device Discovery) -->
+    <div class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 transition-opacity" id="qrModal">
+      <div class="bg-surface-card border border-white/15 rounded-3xl p-8 max-w-md w-full text-center relative shadow-2xl">
+        <button class="absolute top-5 right-5 w-10 h-10 rounded-full bg-surface-bright flex items-center justify-center text-on-surface-variant hover:text-white transition-colors cursor-pointer" onclick="toggleQRModal(false)">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+        <div class="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
+          <span class="material-symbols-outlined text-2xl">qr_code_2</span>
+        </div>
+        <h3 class="text-2xl font-display font-bold text-on-surface">ISO mDL QR-Code</h3>
+        <p class="text-sm text-on-surface-variant mt-1 mb-6">
+          Öffnen Sie Ihre EUDI Wallet-App und scannen Sie diesen Code für ISO 18013-5 Device Discovery.
+        </p>
+
+        <!-- High Visibility QR Target Container -->
+        <div class="p-4 bg-white rounded-2xl inline-flex items-center justify-center mx-auto shadow-lg mb-4 w-60 h-60" id="qrTarget">
+          <!-- QR_SVG_CONTENT -->
+        </div>
+
+        <!-- URI display box -->
+        <div class="mb-6 px-3 py-2 rounded-lg bg-surface border border-white/10 text-xs font-mono text-on-surface-variant truncate" id="qrUri"><!-- QR_URI_CONTENT --></div>
+
+        <button class="w-full py-3 px-4 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-semibold text-sm transition-all shadow-md cursor-pointer" onclick="toggleQRModal(false)">
+          Zurück zur NFC-Erkennung
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="h-4"></footer>
+
+  <script>
+    let timerCountdown = null;
+
+    // Clock updater
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const clockEl = document.getElementById('liveClock');
+      if (clockEl) {
+        clockEl.innerText = `${hours}:${minutes}`;
+      }
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Toggle QR Modal
+    function toggleQRModal(show) {
+      const modal = document.getElementById('qrModal');
+      if (!modal) return;
+      if (show) {
+        modal.classList.remove('hidden');
+        if (window.ipc) {
+          window.ipc.postMessage('request_qr');
+        }
+      } else {
+        modal.classList.add('hidden');
+      }
+    }
+    window.toggleQRModal = toggleQRModal;
+
+    // Set ISO mDL discovery QR content
+    function setIsoMdlQr(uri, svgContent) {
+      const target = document.getElementById('qrTarget');
+      const uriEl = document.getElementById('qrUri');
+      if (target && svgContent) {
+        target.innerHTML = svgContent;
+      }
+      if (uriEl && uri) {
+        uriEl.innerText = uri;
+      }
+    }
+    window.setIsoMdlQr = setIsoMdlQr;
+
+    // Notify host Rust process that DOM is ready
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.ipc) {
+        window.ipc.postMessage('ready');
+      }
+    });
+
+    // State Switcher: 'standby', 'connecting', 'granted', 'denied'
+    function switchState(stateKey, extraInfo) {
+      if (timerCountdown) {
+        clearInterval(timerCountdown);
+      }
+
+      document.querySelectorAll('.kiosk-state').forEach(el => el.classList.add('hidden'));
+      const glow = document.getElementById('ambientGlow');
+
+      if (stateKey === 'standby' || stateKey === 'discovery') {
+        document.getElementById('stateStandby').classList.remove('hidden');
+        if (glow) glow.className = 'absolute w-[680px] h-[680px] rounded-full bg-primary-container/10 blur-[130px] pointer-events-none transition-all duration-700';
+      }
+      else if (stateKey === 'connecting') {
+        document.getElementById('stateConnecting').classList.remove('hidden');
+        if (glow) glow.className = 'absolute w-[680px] h-[680px] rounded-full bg-primary/20 blur-[130px] pointer-events-none transition-all duration-700';
+      }
+      else if (stateKey === 'granted') {
+        document.getElementById('stateGranted').classList.remove('hidden');
+        if (glow) glow.className = 'absolute w-[680px] h-[680px] rounded-full bg-secondary/25 blur-[130px] pointer-events-none transition-all duration-700';
+
+        if (extraInfo) {
+          const sub = document.getElementById('grantedSubtitle');
+          if (sub) sub.innerText = `Willkommen. Freigabe: ${extraInfo}. Tür schließt automatisch.`;
+        }
+
+        let seconds = 5;
+        const label = document.getElementById('countdownLabel');
+        const bar = document.getElementById('countdownProgressBar');
+        if (bar) bar.style.width = '100%';
+        if (label) label.innerText = '5s verbleibend';
+
+        timerCountdown = setInterval(() => {
+          seconds--;
+          if (label) label.innerText = seconds + 's verbleibend';
+          if (bar) bar.style.width = (seconds / 5 * 100) + '%';
+
+          if (seconds <= 0) {
+            clearInterval(timerCountdown);
+            switchState('standby');
+          }
+        }, 1000);
+      }
+      else if (stateKey === 'denied') {
+        document.getElementById('stateDenied').classList.remove('hidden');
+        if (glow) glow.className = 'absolute w-[680px] h-[680px] rounded-full bg-error-container/30 blur-[130px] pointer-events-none transition-all duration-700';
+
+        if (extraInfo) {
+          const sub = document.getElementById('deniedSubtitle');
+          if (sub) sub.innerText = extraInfo;
+        }
+      }
+    }
+    window.switchState = switchState;
+  </script>
+</body>
+</html>

@@ -17,13 +17,15 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hex = "0.4"
 uuid = { version = "1", features = ["v4"] }
-bluer = "0.17.4"
-pcsc = "2.9.0"
-rppal = "0.22.1"
 futures = "0.3.32"
+tokio-stream = { version = "0.1", features = ["sync"] }
+qrcode = "0.14"
+base64 = "0.22"
+pcsc = "2.9.0"
+wry = "0.57"
+tao = "0.37"
 
 # Linux-only hardware crates. They won't build on Windows.
 [target.'cfg(target_os = "linux")'.dependencies]
 bluer = { version = "0.17", features = ["bluetoothd", "l2cap"] }
-pcsc = "2"
 rppal = "0.22"

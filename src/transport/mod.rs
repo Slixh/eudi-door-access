@@ -1,5 +1,6 @@
 pub mod ble;
 pub mod nfc;
+pub mod qr;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -7,6 +8,7 @@ use uuid::Uuid;
 
 /// A DeviceEngagement received over NFC, with the BLE service UUID extracted
 /// from its retrieval methods.
+#[allow(dead_code)]
 pub struct Engagement {
     /// Raw `DeviceEngagement` CBOR bytes (to feed into isomdl).
     pub bytes: Vec<u8>,

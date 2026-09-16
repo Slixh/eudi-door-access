@@ -1,16 +1,51 @@
+#[cfg(target_os = "linux")]
 use super::{Channel, Engagement};
+#[cfg(target_os = "linux")]
 use anyhow::{anyhow, Result};
+#[cfg(target_os = "linux")]
 use bluer::{gatt::remote::Characteristic, Session, AdapterEvent};
+#[cfg(target_os = "linux")]
 use futures::StreamExt;
+#[cfg(target_os = "linux")]
 use std::time::Duration;
+#[cfg(target_os = "linux")]
 use tokio::sync::mpsc;
+#[cfg(target_os = "linux")]
 use tokio::time::timeout;
 
+#[cfg(not(target_os = "linux"))]
+use super::{Channel, Engagement};
+#[cfg(not(target_os = "linux"))]
+use anyhow::{anyhow, Result};
+
+#[cfg(not(target_os = "linux"))]
+pub struct BleChannel;
+
+#[cfg(not(target_os = "linux"))]
+#[async_trait::async_trait]
+impl Channel for BleChannel {
+    async fn send(&mut self, _frame: &[u8]) -> Result<()> {
+        Err(anyhow!("BLE is only supported on Linux"))
+    }
+    async fn recv(&mut self) -> Result<Vec<u8>> {
+        Err(anyhow!("BLE is only supported on Linux"))
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub async fn connect(_eng: &Engagement) -> Result<BleChannel> {
+    Err(anyhow!("BLE is only supported on Linux"))
+}
+
+#[cfg(target_os = "linux")]
 // ISO 18013-5 standardized Characteristic UUIDs for mdoc BLE transfer
 const MDOC_STATE_UUID: &str = "00000001-a123-48ce-896b-4c76973373e6";
+#[cfg(target_os = "linux")]
 const MDOC_C2S_UUID: &str   = "00000002-a123-48ce-896b-4c76973373e6";
+#[cfg(target_os = "linux")]
 const MDOC_S2C_UUID: &str   = "00000003-a123-48ce-896b-4c76973373e6";
 
+#[cfg(target_os = "linux")]
 pub async fn connect(eng: &Engagement) -> Result<BleChannel> {
     let session = Session::new().await?;
     let adapter = session.default_adapter().await?;
@@ -107,12 +142,14 @@ pub async fn connect(eng: &Engagement) -> Result<BleChannel> {
     })
 }
 
+#[cfg(target_os = "linux")]
 pub struct BleChannel {
     pub client2server: Characteristic,
     pub server2client: Characteristic,
     pub notif_rx: mpsc::Receiver<Vec<u8>>,
 }
 
+#[cfg(target_os = "linux")]
 #[async_trait::async_trait]
 impl Channel for BleChannel {
     async fn send(&mut self, frame: &[u8]) -> Result<()> {
